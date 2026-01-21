@@ -6,14 +6,31 @@ import { NetworkManager } from '../engine/NetworkManager';
 
 const TILE_SIZE = 32; // Each tile is 32x32 pixels
 
+interface MapData {
+  width: number;
+  height: number;
+  layers: number[][][];
+}
+
+interface GameState {
+  loaded: boolean;
+  error: string | null;
+}
+
+interface CanvasSize {
+  width: number;
+  height: number;
+}
+
 export function Game() {
-  const canvasRef = useRef(null);
-  const remotePlayersRef = useRef(new Map());
-  const [gameState, setGameState] = useState({
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const remotePlayersRef = useRef(new Map<string, Player>());
+  const isInitializedRef = useRef(false);
+  const [_gameState, setGameState] = useState<GameState>({
     loaded: false,
     error: null
   });
-  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+  const [canvasSize, setCanvasSize] = useState<CanvasSize>({ width: 800, height: 600 });
 
   // Handle window resize to make canvas full screen
   useEffect(() => {
@@ -53,21 +70,33 @@ export function Game() {
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
-    let animationFrameId;
-    let mapRenderer;
-    let player;
-    let inputHandler;
-    let networkManager;
+    if (!ctx) return;
+
+    // Capture ref values for cleanup
+    const remotePlayers = remotePlayersRef.current;
+
+    let animationFrameId: number;
+    let mapRenderer: MapRenderer;
+    let player: Player;
+    let inputHandler: InputHandler;
+    let networkManager: NetworkManager;
 
     // Initialize game
     const init = async () => {
+      // Prevent duplicate initialization (React Strict Mode protection)
+      if (isInitializedRef.current) {
+        console.warn('Game already initialized, skipping duplicate init');
+        return;
+      }
+      isInitializedRef.current = true;
+
       // Clear existing remote players to prevent ghosts from HMR/React Strict Mode
-      remotePlayersRef.current.clear();
+      remotePlayers.clear();
 
       try {
         // Load map data
         const mapResponse = await fetch('/maps/map-079.json');
-        const mapData = await mapResponse.json();
+        const mapData = await mapResponse.json() as MapData;
 
         // Load tileset
         const tileset = new Image();
@@ -86,23 +115,28 @@ export function Game() {
         });
 
         // Load multiple character sprites for multiplayer
-        const characterSprites = [];
+        // Only include sprites with proper 4-frame walking animations
+        const characterSprites: HTMLImageElement[] = [];
         const spriteNames = [
-          'npc01.png', 'npc02.png', 'npc03.png', 'npc04.png',
-          'npc05.png', 'npc06.png', 'npc07.png', 'npc08.png',
-          'boy_run.png', 'girl_run.png', 'player.png'
+          // Trainer sprites with walking animations
+          'boy_run.png',
+          'girl_run.png',
+          'player.png',
+          // NPC sprites with walking animations (if you find some NPCs work well, add them here)
+          'npc01.png',
+          'npc02.png',
         ];
 
         for (const spriteName of spriteNames) {
           const sprite = new Image();
-          await new Promise((resolve, reject) => {
+          await new Promise((resolve) => {
             sprite.onload = () => {
               console.log(`Loaded sprite: ${spriteName}`);
-              resolve();
+              resolve(null);
             };
             sprite.onerror = () => {
               console.warn(`Failed to load ${spriteName}, skipping...`);
-              resolve(); // Continue even if one fails
+              resolve(null); // Continue even if one fails
             };
             sprite.src = `/characters/${spriteName}`;
           });
@@ -116,7 +150,7 @@ export function Game() {
         mapRenderer = new MapRenderer(mapData, tileset, TILE_SIZE);
 
         // Helper function to get character sprite by ID
-        const getCharacterSprite = (spriteId) => {
+        const getCharacterSprite = (spriteId: number): HTMLImageElement => {
           console.log(`[getCharacterSprite] Called with spriteId: ${spriteId}, Available: ${characterSprites.length} sprites`);
 
           if (characterSprites.length === 0) {
@@ -134,7 +168,7 @@ export function Game() {
           const spriteName = spriteNames[index];
 
           console.log(`[getCharacterSprite] spriteId:${spriteId} -> index:${index} -> ${spriteName}`);
-          console.log(`[getCharacterSprite] Sprite loaded: ${selectedSprite.complete && selectedSprite.naturalHeight !== 0}`);
+          console.log(`[getCharacterSprite] Sprite loaded: ${selectedSprite?.complete && selectedSprite?.naturalHeight !== 0}`);
 
           return selectedSprite;
         };
@@ -155,7 +189,7 @@ export function Game() {
 
         // Initialize Network Manager
         const gameInterface = {
-          initLocalPlayer: (playerData) => {
+          initLocalPlayer: (playerData: { spriteId: number }) => {
             // Update local player with sprite from server
             console.log('=== INITIALIZING LOCAL PLAYER ===');
             console.log('Player Data:', playerData);
@@ -168,7 +202,7 @@ export function Game() {
             console.log('After sprite change:', player.sprite.src);
             console.log('=== LOCAL PLAYER INITIALIZED ===');
           },
-          addRemotePlayer: (data) => {
+          addRemotePlayer: (data: { id: string; x: number; y: number; direction: 0 | 1 | 2 | 3; spriteId: number }) => {
             console.log('=== ADDING REMOTE PLAYER ===');
             console.log('Remote Player Data:', data);
             console.log('Remote spriteId:', data.spriteId);
@@ -176,17 +210,17 @@ export function Game() {
             const sprite = getCharacterSprite(data.spriteId);
             const remotePlayer = new Player(data.x, data.y, sprite, TILE_SIZE);
             remotePlayer.direction = data.direction;
-            remotePlayersRef.current.set(data.id, remotePlayer);
+            remotePlayers.set(data.id, remotePlayer);
 
             console.log('Remote player sprite set to:', sprite.src);
-            console.log('Total remote players:', remotePlayersRef.current.size);
+            console.log('Total remote players:', remotePlayers.size);
             console.log('=== REMOTE PLAYER ADDED ===');
           },
-          removeRemotePlayer: (id) => {
-            remotePlayersRef.current.delete(id);
+          removeRemotePlayer: (id: string) => {
+            remotePlayers.delete(id);
           },
-          updateRemotePlayer: (id, data) => {
-            const remotePlayer = remotePlayersRef.current.get(id);
+          updateRemotePlayer: (id: string, data: { x: number; y: number; direction: 0 | 1 | 2 | 3; isMoving: boolean }) => {
+            const remotePlayer = remotePlayers.get(id);
             if (remotePlayer) {
               remotePlayer.setState(data.x, data.y, data.direction, data.isMoving);
             }
@@ -207,14 +241,14 @@ export function Game() {
         gameLoop();
       } catch (error) {
         console.error('Failed to initialize game:', error);
-        setGameState({ loaded: false, error: error.message });
+        setGameState({ loaded: false, error: (error as Error).message });
       }
     };
 
     let lastTime = 0;
 
     // Game loop
-    const gameLoop = (timestamp) => {
+    const gameLoop = (timestamp: number = 0) => {
       // Calculate delta time
       if (!lastTime) lastTime = timestamp;
       const deltaTime = (timestamp - lastTime) / 1000; // Convert to seconds
@@ -265,7 +299,7 @@ export function Game() {
       }
 
       // Render remote players
-      remotePlayersRef.current.forEach((remotePlayer) => {
+      remotePlayers.forEach((remotePlayer) => {
         remotePlayer.update(safeDeltaTime);
 
         // Calculate screen position relative to camera
@@ -300,6 +334,9 @@ export function Game() {
 
     // Cleanup
     return () => {
+      console.log('Cleaning up game instance');
+      isInitializedRef.current = false;
+      remotePlayers.clear();
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
@@ -310,7 +347,7 @@ export function Game() {
         networkManager.disconnect();
       }
     };
-  }, [canvasSize]);
+  }, []); // Empty dependency array - only initialize once on mount
 
   return (
     <div style={{

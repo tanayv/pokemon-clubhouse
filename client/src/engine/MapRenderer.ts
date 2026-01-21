@@ -1,5 +1,26 @@
+type Layer = number[][];
+
+interface MapData {
+  width: number;
+  height: number;
+  layers: Layer[];
+}
+
+interface TileCoords {
+  x: number;
+  y: number;
+}
+
 export class MapRenderer {
-  constructor(mapData, tileset, tileSize) {
+  mapData: MapData;
+  tileset: HTMLImageElement;
+  tileSize: number;
+  width: number;
+  height: number;
+  layers: Layer[];
+  tilesetColumns: number;
+
+  constructor(mapData: MapData, tileset: HTMLImageElement, tileSize: number) {
     this.mapData = mapData;
     this.tileset = tileset;
     this.tileSize = tileSize;
@@ -13,7 +34,7 @@ export class MapRenderer {
   }
 
   // Get tile coordinates in the tileset image
-  getTileCoords(tileId) {
+  getTileCoords(tileId: number): TileCoords | null {
     if (tileId === 0) return null; // Empty tile
 
     // RPG Maker XP tile ID system:
@@ -44,7 +65,7 @@ export class MapRenderer {
   }
 
   // Render the map
-  render(ctx, cameraX, cameraY) {
+  render(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number): void {
     const canvasWidth = ctx.canvas.width;
     const canvasHeight = ctx.canvas.height;
 
@@ -60,7 +81,16 @@ export class MapRenderer {
     }
   }
 
-  renderLayer(ctx, layerIndex, startX, startY, endX, endY, cameraX, cameraY) {
+  renderLayer(
+    ctx: CanvasRenderingContext2D,
+    layerIndex: number,
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    cameraX: number,
+    cameraY: number
+  ): void {
     const layer = this.layers[layerIndex];
     if (!layer) return;
 
@@ -99,12 +129,12 @@ export class MapRenderer {
   }
 
   // Check if a tile ID is blocking
-  isBlockingTile(tileId) {
+  isBlockingTile(tileId: number): boolean {
     if (tileId === 0) return false; // Empty tile
 
     // Tile ID ranges that are blocking (trees, buildings, rocks, etc.)
     // Based on RPG Maker XP / Pokemon FireRed tileset structure
-    const blockingRanges = [
+    const blockingRanges: [number, number][] = [
       [800, 827],   // Trees and forest tiles
       [1280, 1400], // Building walls and roofs
       [1536, 1600], // Rock formations
@@ -124,7 +154,7 @@ export class MapRenderer {
   }
 
   // Check if a tile position is walkable (for collision detection)
-  isWalkable(x, y) {
+  isWalkable(x: number, y: number): boolean {
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
       return false; // Out of bounds
     }

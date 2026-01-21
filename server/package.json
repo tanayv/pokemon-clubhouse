@@ -2,12 +2,23 @@
     "name": "pokemon-server",
     "version": "1.0.0",
     "description": "Multiplayer server for Pokemon Leaf Green clone",
-    "main": "index.js",
+    "main": "dist/index.js",
+    "type": "module",
     "scripts": {
-        "start": "node index.js"
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js",
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "ws": "^8.16.0",
-        "uuid": "^9.0.0"
+        "uuid": "^9.0.0",
+        "ws": "^8.16.0"
+    },
+    "devDependencies": {
+        "@types/node": "^25.0.9",
+        "@types/uuid": "^10.0.0",
+        "@types/ws": "^8.18.1",
+        "tsx": "^4.21.0",
+        "typescript": "^5.9.3"
     }
 }

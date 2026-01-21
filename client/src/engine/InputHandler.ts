@@ -1,5 +1,14 @@
+import type { Player } from './Player';
+import type { MapRenderer } from './MapRenderer';
+
 export class InputHandler {
-  constructor(player, mapRenderer) {
+  player: Player;
+  mapRenderer: MapRenderer;
+  keysHeld: Set<string>;
+  handleKeyDown: (event: KeyboardEvent) => void;
+  handleKeyUp: (event: KeyboardEvent) => void;
+
+  constructor(player: Player, mapRenderer: MapRenderer) {
     this.player = player;
     this.mapRenderer = mapRenderer;
 
@@ -7,15 +16,15 @@ export class InputHandler {
     this.keysHeld = new Set();
 
     // Bind event handlers
-    this.handleKeyDown = this.handleKeyDown.bind(this);
-    this.handleKeyUp = this.handleKeyUp.bind(this);
+    this.handleKeyDown = this._handleKeyDown.bind(this);
+    this.handleKeyUp = this._handleKeyUp.bind(this);
 
     // Register event listeners
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
   }
 
-  handleKeyDown(event) {
+  private _handleKeyDown(event: KeyboardEvent): void {
     // Prevent default behavior for arrow keys
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(event.key.toLowerCase())) {
       event.preventDefault();
@@ -25,12 +34,12 @@ export class InputHandler {
     this.keysHeld.add(event.key);
   }
 
-  handleKeyUp(event) {
+  private _handleKeyUp(event: KeyboardEvent): void {
     this.keysHeld.delete(event.key);
   }
 
   // Call this every frame to check for held keys
-  update() {
+  update(): void {
     // Don't process input if player is already moving
     if (this.player.isMoving) {
       return;
@@ -70,7 +79,7 @@ export class InputHandler {
   }
 
   // Cleanup
-  destroy() {
+  destroy(): void {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
   }

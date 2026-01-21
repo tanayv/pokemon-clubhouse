@@ -1,36 +1,64 @@
+type Direction = 0 | 1 | 2 | 3; // 0=down, 1=left, 2=right, 3=up
+type MoveCallback = (x: number, y: number, direction: Direction, isMoving: boolean) => void;
+
 export class Player {
-  constructor(x, y, sprite, tileSize) {
-    this.x = x; // Grid position X
-    this.y = y; // Grid position Y
+  // Position
+  x: number; // Grid position X
+  y: number; // Grid position Y
+  sprite: HTMLImageElement;
+  tileSize: number;
+
+  // Movement
+  isMoving: boolean;
+  moveProgress: number;
+  moveSpeed: number; // Tiles per second
+  targetX: number;
+  targetY: number;
+
+  // Direction (0 = down, 1 = left, 2 = right, 3 = up)
+  direction: Direction;
+
+  // Animation
+  animationFrame: number;
+  animationTimer: number;
+  frameInterval: number; // Seconds per frame
+  animationSpeed: number; // Kept for backwards compatibility
+
+  // Sprite layout (Pokemon style character sprite sheet)
+  // 128x192 sprite sheet: 4 columns x 4 rows
+  // Each sprite is 32 pixels wide x 48 pixels tall
+  // Row 0: Down, Row 1: Left, Row 2: Right, Row 3: Up
+  spriteWidth: number;
+  spriteHeight: number;
+
+  // Callback
+  onMove?: MoveCallback;
+
+  constructor(x: number, y: number, sprite: HTMLImageElement, tileSize: number) {
+    this.x = x;
+    this.y = y;
     this.sprite = sprite;
     this.tileSize = tileSize;
 
-    // Movement
     this.isMoving = false;
     this.moveProgress = 0;
-    this.moveSpeed = 4.5; // Tiles per second (slower for smoother appearance)
+    this.moveSpeed = 4.5;
     this.targetX = x;
     this.targetY = y;
 
-    // Direction (0 = down, 1 = left, 2 = right, 3 = up)
     this.direction = 0;
 
-    // Animation
     this.animationFrame = 0;
     this.animationTimer = 0;
-    this.frameInterval = 0.12; // Seconds per frame (balanced animation speed)
-    this.animationSpeed = 0.1; // Kept for backwards compatibility if needed, but not used
+    this.frameInterval = 0.12;
+    this.animationSpeed = 0.1;
 
-    // Sprite layout (Pokemon style character sprite sheet)
-    // 128x192 sprite sheet: 4 columns x 4 rows
-    // Each sprite is 32 pixels wide x 48 pixels tall
-    // Row 0: Down, Row 1: Left, Row 2: Right, Row 3: Up
-    this.spriteWidth = 32; // Width of each sprite frame
-    this.spriteHeight = 48; // Height of each sprite frame (taller sprites!)
+    this.spriteWidth = 32;
+    this.spriteHeight = 48;
   }
 
   // Start moving in a direction
-  startMove(dx, dy) {
+  startMove(dx: number, dy: number): boolean {
     if (this.isMoving) {
       console.warn('⚠️ startMove() called but already moving!');
       return false;
@@ -58,7 +86,7 @@ export class Player {
   }
 
   // Update player state
-  update(deltaTime = 0.016) {
+  update(deltaTime = 0.016): void {
     if (this.isMoving) {
       this.moveProgress += this.moveSpeed * deltaTime;
 
@@ -92,7 +120,7 @@ export class Player {
   }
 
   // Set state from network
-  setState(x, y, direction, isMoving) {
+  setState(x: number, y: number, direction: Direction, isMoving: boolean): void {
     // If we are starting a new move
     if (isMoving && !this.isMoving) {
       this.moveProgress = 0;
@@ -117,12 +145,12 @@ export class Player {
   }
 
   // Set callback for movement
-  setOnMove(callback) {
+  setOnMove(callback: MoveCallback): void {
     this.onMove = callback;
   }
 
   // Render player
-  render(ctx, screenX, screenY) {
+  render(ctx: CanvasRenderingContext2D, screenX: number, screenY: number): void {
     // Calculate interpolated position for smooth movement
     let renderX = screenX;
     let renderY = screenY;
@@ -154,7 +182,7 @@ export class Player {
   }
 
   // Get current grid position
-  getPosition() {
+  getPosition(): { x: number; y: number } {
     return { x: this.x, y: this.y };
   }
 }
