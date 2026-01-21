@@ -1,0 +1,13 @@
+{
+    "name": "pokemon-server",
+    "version": "1.0.0",
+    "description": "Multiplayer server for Pokemon Leaf Green clone",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js"
+    },
+    "dependencies": {
+        "ws": "^8.16.0",
+        "uuid": "^9.0.0"
+    }
+}
