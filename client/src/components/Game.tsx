@@ -106,6 +106,38 @@ export function Game() {
           tileset.src = '/tilesets/Outside.png';
         });
 
+        // Load autotiles (8 slots for RPG Maker XP)
+        // Map autotile slots to image files based on the tileset configuration
+        const autotileFiles = [
+          null,                      // Slot 0: Not used in this map
+          '/autotiles/Still water.png', // Slot 1: Water (tile IDs 48-95)
+          null,                      // Slot 2: Not used
+          null,                      // Slot 3: Not used
+          null,                      // Slot 4: Not used
+          '/autotiles/Flowers1.png', // Slot 5: Flowers (tile IDs 240-287)
+          null,                      // Slot 6: Not used
+          null,                      // Slot 7: Not used
+        ];
+
+        const autotiles: HTMLImageElement[] = [];
+        for (let i = 0; i < autotileFiles.length; i++) {
+          if (autotileFiles[i]) {
+            const autotile = new Image();
+            await new Promise((resolve) => {
+              autotile.onload = () => {
+                console.log(`Loaded autotile ${i}: ${autotileFiles[i]}`);
+                resolve(null);
+              };
+              autotile.onerror = () => {
+                console.warn(`Failed to load autotile ${i}: ${autotileFiles[i]}`);
+                resolve(null);
+              };
+              autotile.src = autotileFiles[i]!;
+            });
+            autotiles[i] = autotile;
+          }
+        }
+
         // Load player sprite
         const playerSprite = new Image();
         await new Promise((resolve, reject) => {
@@ -147,7 +179,7 @@ export function Game() {
         console.log(`Total character sprites loaded: ${characterSprites.length}`);
 
         // Initialize renderer
-        mapRenderer = new MapRenderer(mapData, tileset, TILE_SIZE);
+        mapRenderer = new MapRenderer(mapData, tileset, TILE_SIZE, autotiles);
 
         // Helper function to get character sprite by ID
         const getCharacterSprite = (spriteId: number): HTMLImageElement => {
@@ -342,6 +374,9 @@ export function Game() {
       }
       if (inputHandler) {
         inputHandler.destroy();
+      }
+      if (mapRenderer) {
+        mapRenderer.destroy();
       }
       if (networkManager) {
         networkManager.disconnect();
