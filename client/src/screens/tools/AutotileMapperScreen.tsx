@@ -29,7 +29,7 @@ const patternLabels: Record<PatternType, string> = {
   'other': 'Other/Unknown'
 };
 
-export function AutotileMapper() {
+export function AutotileMapperScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [selectedPattern, setSelectedPattern] = useState<PatternType>('inner');
   const [mappings, setMappings] = useState<Mappings>({});

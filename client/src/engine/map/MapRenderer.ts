@@ -170,7 +170,7 @@ export class MapRenderer {
   }
 
   // Render an RMXP autotile using mini-tile assembly
-  // Based on user-labeled autotile mapping from AutotileMapper tool
+  // Based on Algorithm 19 from AutotileTester (verified correct)
   private renderRMXPAutotile(
     ctx: CanvasRenderingContext2D,
     autotileImage: HTMLImageElement,
@@ -180,6 +180,8 @@ export class MapRenderer {
     screenX: number,
     screenY: number
   ): void {
+    const halfTile = this.tileSize / 2; // 16 pixels for mini-tiles
+
     // Check all 8 neighbors (4 cardinal + 4 diagonal)
     const hasUp = this.getTileIdAt(x, y - 1) === tileId;
     const hasRight = this.getTileIdAt(x + 1, y) === tileId;
@@ -190,117 +192,59 @@ export class MapRenderer {
     const hasDownLeft = this.getTileIdAt(x - 1, y + 1) === tileId;
     const hasDownRight = this.getTileIdAt(x + 1, y + 1) === tileId;
 
-    const halfTile = this.tileSize / 2; // 16 pixels for mini-tiles
-
-    // Autotile pattern mappings (96x128 = 6 cols x 8 rows of 16x16 mini-tiles)
-    // Based on user labeling from AutotileMapper (corrected):
-    //
-    // Pattern distribution:
-    // - Inner (fully surrounded): rows 3-7, cols 1-4 (many tiles)
-    // - Edge-horizontal: row 2, cols 1-4 (4 tiles)
-    // - Edge-vertical: col 0 (rows 1,3-7), col 5 (rows 2-7), col 1 row 1 (12 tiles)
-    // - Inner-cut-corner: (0,0), (1,0), (4,0), (5,0), (0,2), (5,2) (6 tiles)
-    // - Other/Outer-corner: (2,0), (3,0), (2,1), (3,1) (4 tiles)
-
-    // Helper function to get mini-tile based on neighbor pattern
-    // Each quadrant (TL, TR, BL, BR) is determined independently
+    // Helper function - determines which mini-tile to use for each quadrant
     const getMiniTile = (
-      hasAdjacent1: boolean, // horizontal neighbor (left/right)
-      hasAdjacent2: boolean, // vertical neighbor (up/down)
+      hasAdjacent1: boolean,
+      hasAdjacent2: boolean,
       hasDiagonal: boolean,
       quadrant: 'TL' | 'TR' | 'BL' | 'BR'
     ): { col: number, row: number } => {
-
       if (hasAdjacent1 && hasAdjacent2) {
-        // Both adjacent neighbors present
         if (hasDiagonal) {
-          // Inner (fully connected) - use inner tiles from row 3
-          // TL: (1,3), TR: (2,3), BL: (1,4), BR: (2,4)
+          // Inner (fully connected)
           if (quadrant === 'TL') return { col: 1, row: 3 };
           if (quadrant === 'TR') return { col: 2, row: 3 };
           if (quadrant === 'BL') return { col: 1, row: 4 };
-          if (quadrant === 'BR') return { col: 2, row: 4 };
+          return { col: 2, row: 4 };
         } else {
-          // Inner-cut corner (both neighbors but missing diagonal)
-          // TL cut: (0,0), TR cut: (1,0), BL cut: (4,0), BR cut: (5,0)
+          // Inner-cut corner
           if (quadrant === 'TL') return { col: 0, row: 0 };
           if (quadrant === 'TR') return { col: 1, row: 0 };
           if (quadrant === 'BL') return { col: 4, row: 0 };
-          if (quadrant === 'BR') return { col: 5, row: 0 };
+          return { col: 5, row: 0 };
         }
       } else if (!hasAdjacent1 && !hasAdjacent2) {
-        // Outer corner (no adjacent neighbors) - use "other" tiles
-        // TL: (2,0), TR: (3,0), BL: (2,1), BR: (3,1)
-        if (quadrant === 'TL') return { col: 2, row: 0 };
-        if (quadrant === 'TR') return { col: 3, row: 0 };
-        if (quadrant === 'BL') return { col: 2, row: 1 };
-        if (quadrant === 'BR') return { col: 3, row: 1 };
+        // Outer corner (rounded edges) - ALGORITHM 19
+        if (quadrant === 'TL') return { col: 0, row: 2 };
+        if (quadrant === 'TR') return { col: 5, row: 2 };
+        if (quadrant === 'BL') return { col: 0, row: 2 };
+        return { col: 5, row: 2 };
       } else if (hasAdjacent1 && !hasAdjacent2) {
-        // Only horizontal neighbor (left/right) = edge-vertical
-        // Water extends horizontally but not vertically → vertical edge (left or right)
-        // Use edge-vertical tiles from cols 0 and 5
-        if (quadrant === 'TL') return { col: 0, row: 3 };
-        if (quadrant === 'TR') return { col: 5, row: 3 };
-        if (quadrant === 'BL') return { col: 0, row: 4 };
-        if (quadrant === 'BR') return { col: 5, row: 4 };
-      } else {
-        // Only vertical neighbor (up/down) = edge-horizontal
-        // Water extends vertically but not horizontally → horizontal edge (top or bottom)
-        // Use edge-horizontal tiles from row 2, cols 1-4
+        // Edge-horizontal (from Algorithm 19)
         if (quadrant === 'TL') return { col: 1, row: 2 };
         if (quadrant === 'TR') return { col: 2, row: 2 };
         if (quadrant === 'BL') return { col: 3, row: 2 };
-        if (quadrant === 'BR') return { col: 4, row: 2 };
+        return { col: 4, row: 2 };
+      } else {
+        // Edge-vertical (from Algorithm 19)
+        if (quadrant === 'TL') return { col: 0, row: 3 };
+        if (quadrant === 'TR') return { col: 5, row: 3 };
+        if (quadrant === 'BL') return { col: 0, row: 4 };
+        return { col: 5, row: 4 };
       }
-
-      // Fallback (should never reach here)
-      return { col: 1, row: 3 };
     };
 
-    // Top-left quadrant (checks: left, up, up-left diagonal)
+    // Determine each quadrant
     const tl = getMiniTile(hasLeft, hasUp, hasUpLeft, 'TL');
-
-    // Top-right quadrant (checks: right, up, up-right diagonal)
     const tr = getMiniTile(hasRight, hasUp, hasUpRight, 'TR');
-
-    // Bottom-left quadrant (checks: left, down, down-left diagonal)
     const bl = getMiniTile(hasLeft, hasDown, hasDownLeft, 'BL');
-
-    // Bottom-right quadrant (checks: right, down, down-right diagonal)
     const br = getMiniTile(hasRight, hasDown, hasDownRight, 'BR');
 
     // Draw all four quadrants
-    ctx.drawImage(
-      autotileImage,
-      tl.col * halfTile, tl.row * halfTile,
-      halfTile, halfTile,
-      screenX, screenY,
-      halfTile, halfTile
-    );
-
-    ctx.drawImage(
-      autotileImage,
-      tr.col * halfTile, tr.row * halfTile,
-      halfTile, halfTile,
-      screenX + halfTile, screenY,
-      halfTile, halfTile
-    );
-
-    ctx.drawImage(
-      autotileImage,
-      bl.col * halfTile, bl.row * halfTile,
-      halfTile, halfTile,
-      screenX, screenY + halfTile,
-      halfTile, halfTile
-    );
-
-    ctx.drawImage(
-      autotileImage,
-      br.col * halfTile, br.row * halfTile,
-      halfTile, halfTile,
-      screenX + halfTile, screenY + halfTile,
-      halfTile, halfTile
-    );
+    ctx.drawImage(autotileImage, tl.col * halfTile, tl.row * halfTile, halfTile, halfTile, screenX, screenY, halfTile, halfTile);
+    ctx.drawImage(autotileImage, tr.col * halfTile, tr.row * halfTile, halfTile, halfTile, screenX + halfTile, screenY, halfTile, halfTile);
+    ctx.drawImage(autotileImage, bl.col * halfTile, bl.row * halfTile, halfTile, halfTile, screenX, screenY + halfTile, halfTile, halfTile);
+    ctx.drawImage(autotileImage, br.col * halfTile, br.row * halfTile, halfTile, halfTile, screenX + halfTile, screenY + halfTile, halfTile, halfTile);
   }
 
   // Corner-matching algorithm for self-autotiles
@@ -524,5 +468,80 @@ export class MapRenderer {
     }
 
     return true;
+  }
+
+  // Check if a tile position is grass (for animation triggers)
+  isGrassTile(x: number, y: number): boolean {
+    if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
+      return false;
+    }
+
+    // Check all layers for tall grass
+    // Layer 2 (top overlay)
+    if (this.layers.length > 2) {
+      const layer2 = this.layers[2];
+      if (layer2 && layer2[y] && layer2[y][x]) {
+        const tileId = layer2[y][x];
+        if (tileId !== 0) {
+          console.log(`[isGrassTile] Layer 2 tile at (${x}, ${y}): ${tileId}`);
+
+          // Check for tall grass in layer 2
+          if (
+            (tileId >= 1656 && tileId <= 1682) ||
+            (tileId >= 1784 && tileId <= 1812)
+          ) {
+            console.log(`[isGrassTile] ✓ TALL GRASS FOUND in Layer 2 at (${x}, ${y})`);
+            return true;
+          }
+        }
+      }
+    }
+
+    // Layer 1 (middle overlay)
+    if (this.layers.length > 1) {
+      const layer1 = this.layers[1];
+      if (layer1 && layer1[y] && layer1[y][x]) {
+        const tileId = layer1[y][x];
+        if (tileId !== 0) {
+          console.log(`[isGrassTile] Layer 1 tile at (${x}, ${y}): ${tileId}`);
+
+          // Tall grass overlay tile ranges
+          if (
+            (tileId >= 1656 && tileId <= 1682) ||
+            (tileId >= 1784 && tileId <= 1812)
+          ) {
+            console.log(`[isGrassTile] ✓ TALL GRASS FOUND in Layer 1 at (${x}, ${y})`);
+            return true;
+          }
+        }
+      }
+    }
+
+    // Layer 0 (base layer) - Check for base grass tiles
+    if (this.layers.length > 0) {
+      const layer0 = this.layers[0];
+      if (layer0 && layer0[y] && layer0[y][x]) {
+        const tileId = layer0[y][x];
+
+        // Only log and check specific tiles that are tall encounter grass
+        // Based on Pokemon tilesets, typically 389-390 are the dark tall grass
+        // while 385-388 might be lighter/shorter grass
+        if (tileId >= 385 && tileId <= 390) {
+          console.log(`[isGrassTile] Layer 0 grass tile at (${x}, ${y}): ${tileId} - checking if tall grass...`);
+        }
+
+        // ONLY tiles 389-390 are the tall dark encounter grass
+        // Tiles 385-388 are regular shorter grass (no animation)
+        if (tileId === 389 || tileId === 390) {
+          console.log(`[isGrassTile] ✓ TALL DARK GRASS FOUND in Layer 0 at (${x}, ${y}), tileId: ${tileId}`);
+          return true;
+        } else if (tileId >= 385 && tileId <= 388) {
+          console.log(`[isGrassTile] ✗ Regular grass (no animation), tileId: ${tileId}`);
+          return false;
+        }
+      }
+    }
+
+    return false;
   }
 }

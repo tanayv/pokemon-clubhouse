@@ -3,6 +3,8 @@ import { MapRenderer } from '../engine/MapRenderer';
 import { Player } from '../engine/Player';
 import { InputHandler } from '../engine/InputHandler';
 import { NetworkManager } from '../engine/NetworkManager';
+import { checkTransition } from '../engine/MapTransitions';
+import { GrassAnimationManager } from '../engine/GrassAnimation';
 
 const TILE_SIZE = 32; // Each tile is 32x32 pixels
 
@@ -31,6 +33,12 @@ export function Game() {
     error: null
   });
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({ width: 800, height: 600 });
+  const currentMapIdRef = useRef<number>(79); // Start at Pallet Town
+  const mapDataRef = useRef<MapData | null>(null);
+  const mapRendererRef = useRef<MapRenderer | null>(null);
+  const playerRef = useRef<Player | null>(null);
+  const grassAnimationRef = useRef<GrassAnimationManager | null>(null);
+  const [playerCoords, setPlayerCoords] = useState({ x: 0, y: 0, mapId: 79 });
 
   // Handle window resize to make canvas full screen
   useEffect(() => {
@@ -80,6 +88,7 @@ export function Game() {
     let player: Player;
     let inputHandler: InputHandler;
     let networkManager: NetworkManager;
+    let grassAnimation: GrassAnimationManager;
 
     // Initialize game
     const init = async () => {
@@ -94,9 +103,66 @@ export function Game() {
       remotePlayers.clear();
 
       try {
-        // Load map data
+        // Helper function to load a map
+        const loadMap = async (mapId: number, spawnX?: number, spawnY?: number) => {
+          console.log(`Loading map ${mapId}...`);
+          const oldMapId = currentMapIdRef.current;
+
+          const mapResponse = await fetch(`/maps/map-${String(mapId).padStart(3, '0')}.json`);
+          const newMapData = await mapResponse.json() as MapData;
+
+          // Update map data reference
+          mapDataRef.current = newMapData;
+          currentMapIdRef.current = mapId;
+
+          // Create new map renderer
+          if (mapRendererRef.current) {
+            mapRendererRef.current.destroy();
+          }
+          mapRendererRef.current = new MapRenderer(newMapData, tileset, TILE_SIZE, autotiles);
+          mapRenderer = mapRendererRef.current;
+
+          // Update player position if spawn coordinates provided
+          if (spawnX !== undefined && spawnY !== undefined && playerRef.current) {
+            console.log(`Spawning player at (${spawnX}, ${spawnY})`);
+            playerRef.current.x = spawnX;
+            playerRef.current.y = spawnY;
+            playerRef.current.targetX = spawnX;
+            playerRef.current.targetY = spawnY;
+            playerRef.current.isMoving = false;
+            playerRef.current.moveProgress = 0;
+            playerRef.current.mapId = mapId; // Update player's mapId
+
+            // Update coordinate display
+            setPlayerCoords({ x: spawnX, y: spawnY, mapId: currentMapIdRef.current });
+
+            // Notify server of map transition
+            if (networkManager) {
+              networkManager.sendMapTransition(oldMapId, mapId, spawnX, spawnY);
+            }
+
+            // Clear remote players (server will send new ones for this map)
+            remotePlayers.clear();
+            console.log('Remote players cleared for map transition');
+
+            // Clear grass animations
+            if (grassAnimation) {
+              grassAnimation.clear();
+            }
+          }
+
+          // Update input handler with new map renderer
+          if (inputHandler) {
+            inputHandler.mapRenderer = mapRenderer;
+          }
+
+          console.log(`Map ${mapId} loaded successfully`);
+        };
+
+        // Load initial map - Pallet Town
         const mapResponse = await fetch('/maps/map-079.json');
         const mapData = await mapResponse.json() as MapData;
+        mapDataRef.current = mapData;
 
         // Load tileset
         const tileset = new Image();
@@ -180,6 +246,11 @@ export function Game() {
 
         // Initialize renderer
         mapRenderer = new MapRenderer(mapData, tileset, TILE_SIZE, autotiles);
+        mapRendererRef.current = mapRenderer;
+
+        // Initialize grass animation manager
+        grassAnimation = new GrassAnimationManager(TILE_SIZE);
+        grassAnimationRef.current = grassAnimation;
 
         // Helper function to get character sprite by ID
         const getCharacterSprite = (spriteId: number): HTMLImageElement => {
@@ -205,9 +276,9 @@ export function Game() {
           return selectedSprite;
         };
 
-        // Initialize player at spawn position (center of map) - will be updated with server spriteId
-        const spawnX = Math.floor(mapData.width / 2);
-        const spawnY = Math.floor(mapData.height / 2);
+        // Initialize player at spawn position (near navigational spot in Pallet Town) - will be updated with server spriteId
+        const spawnX = 20; // Navigational spot X
+        const spawnY = 1;  // One tile south of northern edge (Y: 0 is the transition point)
 
         player = new Player(
           spawnX,
@@ -215,13 +286,18 @@ export function Game() {
           playerSprite, // Temporary sprite, will be replaced when server sends INIT
           TILE_SIZE
         );
+        player.mapId = currentMapIdRef.current; // Set initial map ID
+        playerRef.current = player;
+
+        // Initialize coordinate display
+        setPlayerCoords({ x: spawnX, y: spawnY, mapId: currentMapIdRef.current });
 
         // Initialize input handler
         inputHandler = new InputHandler(player, mapRenderer);
 
         // Initialize Network Manager
         const gameInterface = {
-          initLocalPlayer: (playerData: { spriteId: number }) => {
+          initLocalPlayer: (playerData: { spriteId: number; mapId?: number }) => {
             // Update local player with sprite from server
             console.log('=== INITIALIZING LOCAL PLAYER ===');
             console.log('Player Data:', playerData);
@@ -231,10 +307,16 @@ export function Game() {
             const sprite = getCharacterSprite(playerData.spriteId);
             player.sprite = sprite;
 
+            // Update player's mapId if provided
+            if (playerData.mapId !== undefined) {
+              player.mapId = playerData.mapId;
+              currentMapIdRef.current = playerData.mapId;
+            }
+
             console.log('After sprite change:', player.sprite.src);
             console.log('=== LOCAL PLAYER INITIALIZED ===');
           },
-          addRemotePlayer: (data: { id: string; x: number; y: number; direction: 0 | 1 | 2 | 3; spriteId: number }) => {
+          addRemotePlayer: (data: { id: string; x: number; y: number; direction: 0 | 1 | 2 | 3; spriteId: number; mapId?: number }) => {
             console.log('=== ADDING REMOTE PLAYER ===');
             console.log('Remote Player Data:', data);
             console.log('Remote spriteId:', data.spriteId);
@@ -242,9 +324,11 @@ export function Game() {
             const sprite = getCharacterSprite(data.spriteId);
             const remotePlayer = new Player(data.x, data.y, sprite, TILE_SIZE);
             remotePlayer.direction = data.direction;
+            remotePlayer.mapId = data.mapId !== undefined ? data.mapId : currentMapIdRef.current; // Set mapId
             remotePlayers.set(data.id, remotePlayer);
 
             console.log('Remote player sprite set to:', sprite.src);
+            console.log('Remote player mapId:', remotePlayer.mapId);
             console.log('Total remote players:', remotePlayers.size);
             console.log('=== REMOTE PLAYER ADDED ===');
           },
@@ -259,12 +343,40 @@ export function Game() {
           }
         };
 
-        networkManager = new NetworkManager(gameInterface);
+        networkManager = new NetworkManager(gameInterface, currentMapIdRef.current);
         networkManager.connect();
 
-        // Setup local player network sync
+        // Setup local player network sync and map transition checking
         player.setOnMove((x, y, direction, isMoving) => {
           networkManager.sendMove(x, y, direction, isMoving);
+
+          // Update coordinate display
+          setPlayerCoords({ x, y, mapId: currentMapIdRef.current });
+
+          // Trigger grass animation when player arrives at grass tile
+          // isMoving=false means player just finished moving to position (x, y)
+          if (!isMoving && mapRenderer && grassAnimation) {
+            if (mapRenderer.isGrassTile(x, y)) {
+              console.log(`🌿 Grass animation triggered at (${x}, ${y})`);
+              grassAnimation.trigger(x, y);
+            }
+          }
+
+          // Check for map transitions when player finishes moving
+          if (!isMoving && mapDataRef.current) {
+            const transition = checkTransition(
+              currentMapIdRef.current,
+              x,
+              y,
+              mapDataRef.current.width,
+              mapDataRef.current.height
+            );
+
+            if (transition) {
+              console.log(`Map transition triggered: ${currentMapIdRef.current} -> ${transition.toMap}`);
+              loadMap(transition.toMap, transition.spawnX, transition.spawnY);
+            }
+          }
         });
 
         setGameState({ loaded: true, error: null });
@@ -297,26 +409,36 @@ export function Game() {
         inputHandler.update();
       }
 
+      // Get current player and map renderer references
+      const currentPlayer = playerRef.current || player;
+      const currentMapRenderer = mapRendererRef.current || mapRenderer;
+      const currentGrassAnimation = grassAnimationRef.current || grassAnimation;
+
       // Update player
-      if (player) {
-        player.update(safeDeltaTime);
+      if (currentPlayer) {
+        currentPlayer.update(safeDeltaTime);
+      }
+
+      // Update grass animations
+      if (currentGrassAnimation) {
+        currentGrassAnimation.update(safeDeltaTime);
       }
 
       // Calculate camera position (centered on player)
       let cameraX = 0;
       let cameraY = 0;
 
-      if (player && mapRenderer) {
+      if (currentPlayer && currentMapRenderer) {
         // Calculate player's interpolated position - matches Player.render exactly
-        let playerWorldX = player.x * TILE_SIZE;
-        let playerWorldY = player.y * TILE_SIZE;
+        let playerWorldX = currentPlayer.x * TILE_SIZE;
+        let playerWorldY = currentPlayer.y * TILE_SIZE;
 
         // Apply same interpolation as Player.render for synchronized movement
-        if (player.isMoving) {
-          const dx = player.targetX - player.x;
-          const dy = player.targetY - player.y;
-          playerWorldX += dx * player.moveProgress * TILE_SIZE;
-          playerWorldY += dy * player.moveProgress * TILE_SIZE;
+        if (currentPlayer.isMoving) {
+          const dx = currentPlayer.targetX - currentPlayer.x;
+          const dy = currentPlayer.targetY - currentPlayer.y;
+          playerWorldX += dx * currentPlayer.moveProgress * TILE_SIZE;
+          playerWorldY += dy * currentPlayer.moveProgress * TILE_SIZE;
         }
 
         // Center camera on player's interpolated position
@@ -326,12 +448,22 @@ export function Game() {
       }
 
       // Render map with camera offset
-      if (mapRenderer) {
-        mapRenderer.render(ctx, cameraX, cameraY);
+      if (currentMapRenderer) {
+        currentMapRenderer.render(ctx, cameraX, cameraY);
       }
 
-      // Render remote players
+      // Render grass animations (after map, before players)
+      if (currentGrassAnimation) {
+        currentGrassAnimation.render(ctx, cameraX, cameraY);
+      }
+
+      // Render remote players (only those on the same map)
       remotePlayers.forEach((remotePlayer) => {
+        // Only render and update players on the same map
+        if (remotePlayer.mapId !== currentMapIdRef.current) {
+          return; // Skip players on different maps
+        }
+
         remotePlayer.update(safeDeltaTime);
 
         // Calculate screen position relative to camera
@@ -346,17 +478,17 @@ export function Game() {
         remotePlayer.render(ctx, rScreenX, rScreenY);
       });
 
-      if (player) {
+      if (currentPlayer) {
         // Calculate player screen position (centered)
         // We pass the BASE coordinate (without interpolation) because Player.render adds the interpolation
         // Since camera follows player (smoothly), passing base - camera means:
         // Input: (Start - (Start + Offset - Center)) = Center - Offset
         // Player.render adds Offset -> Center
         // Result: Player stays centered
-        const playerScreenX = player.x * TILE_SIZE - cameraX;
-        const playerScreenY = player.y * TILE_SIZE - cameraY;
+        const playerScreenX = currentPlayer.x * TILE_SIZE - cameraX;
+        const playerScreenY = currentPlayer.y * TILE_SIZE - cameraY;
 
-        player.render(ctx, playerScreenX, playerScreenY);
+        currentPlayer.render(ctx, playerScreenX, playerScreenY);
       }
 
       animationFrameId = requestAnimationFrame(gameLoop);
@@ -378,9 +510,15 @@ export function Game() {
       if (mapRenderer) {
         mapRenderer.destroy();
       }
+      if (mapRendererRef.current) {
+        mapRendererRef.current.destroy();
+        mapRendererRef.current = null;
+      }
       if (networkManager) {
         networkManager.disconnect();
       }
+      mapDataRef.current = null;
+      playerRef.current = null;
     };
   }, []); // Empty dependency array - only initialize once on mount
 
@@ -394,7 +532,8 @@ export function Game() {
       backgroundColor: '#000',
       margin: 0,
       padding: 0,
-      overflow: 'hidden'
+      overflow: 'hidden',
+      position: 'relative'
     }}>
       <canvas
         ref={canvasRef}
@@ -405,6 +544,27 @@ export function Game() {
           backgroundColor: '#000'
         }}
       />
+      {/* Coordinate Display Overlay */}
+      <div style={{
+        position: 'absolute',
+        top: '10px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        color: '#fff',
+        padding: '10px 20px',
+        borderRadius: '8px',
+        fontFamily: 'monospace',
+        fontSize: '16px',
+        fontWeight: 'bold',
+        zIndex: 1000,
+        border: '2px solid #4CAF50',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)'
+      }}>
+        <div>Map ID: <span style={{ color: '#4CAF50' }}>{playerCoords.mapId}</span> |
+        X: <span style={{ color: '#2196F3' }}>{playerCoords.x}</span> |
+        Y: <span style={{ color: '#FF9800' }}>{playerCoords.y}</span></div>
+      </div>
     </div>
   );
 }

@@ -7,6 +7,7 @@ interface PlayerData {
   direction: Direction;
   isMoving: boolean;
   spriteId: number;
+  mapId: number; // NEW: current map ID
 }
 
 interface InitMessage {
@@ -27,6 +28,7 @@ interface PlayerMoveMessage {
   y: number;
   direction: Direction;
   isMoving: boolean;
+  mapId?: number; // NEW: optional for backward compatibility
 }
 
 interface PlayerLeaveMessage {
@@ -55,12 +57,14 @@ export class NetworkManager {
   socket: WebSocket | null;
   connected: boolean;
   playerId: string | null;
+  currentMapId: number; // NEW: track current map ID
 
-  constructor(game: GameInterface) {
+  constructor(game: GameInterface, initialMapId: number = 79) {
     this.game = game;
     this.socket = null;
     this.connected = false;
     this.playerId = null;
+    this.currentMapId = initialMapId; // Start at Pallet Town by default
   }
 
   connect(): void {
@@ -153,9 +157,27 @@ export class NetworkManager {
         x,
         y,
         direction,
-        isMoving
+        isMoving,
+        mapId: this.currentMapId // NEW: include current map ID
       }));
     }
+  }
+
+  sendMapTransition(oldMapId: number, newMapId: number, newX: number, newY: number): void {
+    if (this.connected && this.socket) {
+      this.currentMapId = newMapId;
+      this.socket.send(JSON.stringify({
+        type: 'MAP_TRANSITION',
+        fromMap: oldMapId,
+        toMap: newMapId,
+        x: newX,
+        y: newY
+      }));
+    }
+  }
+
+  setCurrentMap(mapId: number): void {
+    this.currentMapId = mapId;
   }
 
   disconnect(): void {

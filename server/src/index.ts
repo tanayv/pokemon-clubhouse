@@ -11,6 +11,7 @@ interface Player {
   direction: Direction;
   isMoving: boolean;
   spriteId: number;
+  mapId: number; // NEW: current map ID
 }
 
 interface MoveMessage {
@@ -19,9 +20,18 @@ interface MoveMessage {
   y: number;
   direction: Direction;
   isMoving: boolean;
+  mapId?: number; // NEW: optional for backward compatibility
 }
 
-type ClientMessage = MoveMessage;
+interface MapTransitionMessage {
+  type: 'MAP_TRANSITION';
+  fromMap: number;
+  toMap: number;
+  x: number;
+  y: number;
+}
+
+type ClientMessage = MoveMessage | MapTransitionMessage;
 
 interface ServerInitMessage {
   type: 'INIT';
@@ -41,6 +51,7 @@ interface ServerPlayerMoveMessage {
   y: number;
   direction: Direction;
   isMoving: boolean;
+  mapId?: number; // NEW: optional for map transitions
 }
 
 interface ServerPlayerLeaveMessage {
@@ -85,32 +96,35 @@ wss.on('connection', (ws: WebSocket) => {
   // Initialize player state
   const player: Player = {
     id: playerId,
-    x: 18, // Default spawn X (center of map)
-    y: 10, // Default spawn Y
+    x: 20, // Navigational spot X in Pallet Town
+    y: 1,  // One tile south of northern edge (Y: 0 is the transition point)
     direction: 0,
     isMoving: false,
-    spriteId: spriteId
+    spriteId: spriteId,
+    mapId: 79 // Start at Pallet Town
   };
 
   players.set(ws, player);
 
   // Send initialization message to the new player
-  // Ensure all existing players have spriteId (fix for any old connections)
-  const playersArray = Array.from(players.values()).map(p => {
-    if (p.spriteId === undefined || p.spriteId === null) {
-      console.warn('Player without spriteId detected! Assigning one:', p.id);
-      p.spriteId = Math.floor(Math.random() * AVAILABLE_SPRITES);
-    }
-    return p;
-  });
+  // Only send players on the same map (Pallet Town by default)
+  const playersOnSameMap = Array.from(players.values())
+    .filter(p => p.mapId === player.mapId)
+    .map(p => {
+      if (p.spriteId === undefined || p.spriteId === null) {
+        console.warn('Player without spriteId detected! Assigning one:', p.id);
+        p.spriteId = Math.floor(Math.random() * AVAILABLE_SPRITES);
+      }
+      return p;
+    });
 
   const initMessage: ServerInitMessage = {
     type: 'INIT',
     id: playerId,
-    players: playersArray
+    players: playersOnSameMap
   };
-  console.log('Sending INIT to new player:', playerId, 'with', players.size, 'existing players');
-  console.log('INIT message players:', initMessage.players.map(p => ({ id: p.id, spriteId: p.spriteId })));
+  console.log('Sending INIT to new player:', playerId, 'with', playersOnSameMap.length, 'players on map', player.mapId);
+  console.log('INIT message players:', initMessage.players.map(p => ({ id: p.id, spriteId: p.spriteId, mapId: p.mapId })));
   ws.send(JSON.stringify(initMessage));
 
   // Broadcast new player to everyone else
@@ -127,11 +141,12 @@ wss.on('connection', (ws: WebSocket) => {
       y: player.y,
       direction: player.direction,
       isMoving: player.isMoving,
-      spriteId: player.spriteId
+      spriteId: player.spriteId,
+      mapId: player.mapId
     }
   };
   console.log('Broadcasting PLAYER_JOIN, message:', JSON.stringify(joinMessage));
-  broadcast(joinMessage, ws);
+  broadcastToMap(player.mapId, joinMessage, ws);
 
   ws.on('message', (message: Buffer) => {
     try {
@@ -148,16 +163,80 @@ wss.on('connection', (ws: WebSocket) => {
               p.direction = data.direction;
               p.isMoving = data.isMoving;
 
-              // Broadcast movement to everyone else
+              // Update mapId if provided (for backward compatibility)
+              if (data.mapId !== undefined) {
+                p.mapId = data.mapId;
+              }
+
+              // Broadcast movement to other players on the same map
               const moveMessage: ServerPlayerMoveMessage = {
                 type: 'PLAYER_MOVE',
                 id: playerId,
                 x: p.x,
                 y: p.y,
                 direction: p.direction,
-                isMoving: p.isMoving
+                isMoving: p.isMoving,
+                mapId: p.mapId
               };
-              broadcast(moveMessage, ws);
+              broadcastToMap(p.mapId, moveMessage, ws);
+            }
+          }
+          break;
+        }
+
+        case 'MAP_TRANSITION': {
+          // Handle map transition
+          if (players.has(ws)) {
+            const p = players.get(ws);
+            if (p) {
+              console.log(`Player ${playerId} transitioning from map ${data.fromMap} to ${data.toMap}`);
+
+              // 1. Tell players on OLD map that this player left
+              const leaveMessage: ServerPlayerLeaveMessage = {
+                type: 'PLAYER_LEAVE',
+                id: playerId
+              };
+              broadcastToMap(data.fromMap, leaveMessage, ws);
+
+              // 2. Update player's position and map ID
+              p.x = data.x;
+              p.y = data.y;
+              p.mapId = data.toMap;
+              p.isMoving = false;
+
+              // 3. Tell players on NEW map that this player joined
+              const joinMessage: ServerPlayerJoinMessage = {
+                type: 'PLAYER_JOIN',
+                player: {
+                  id: p.id,
+                  x: p.x,
+                  y: p.y,
+                  direction: p.direction,
+                  isMoving: p.isMoving,
+                  spriteId: p.spriteId,
+                  mapId: p.mapId
+                }
+              };
+              broadcastToMap(data.toMap, joinMessage, ws);
+
+              // 4. Send current players on NEW map to transitioning player
+              const playersOnNewMap: Player[] = [];
+              players.forEach((otherPlayer, otherWs) => {
+                if (otherPlayer.mapId === data.toMap && otherWs !== ws) {
+                  playersOnNewMap.push(otherPlayer);
+                }
+              });
+
+              // Send each player as a join message
+              playersOnNewMap.forEach((otherPlayer) => {
+                const playerJoinMsg: ServerPlayerJoinMessage = {
+                  type: 'PLAYER_JOIN',
+                  player: otherPlayer
+                };
+                ws.send(JSON.stringify(playerJoinMsg));
+              });
+
+              console.log(`Map transition complete: player ${playerId} now on map ${data.toMap} with ${playersOnNewMap.length} other players`);
             }
           }
           break;
@@ -170,22 +249,26 @@ wss.on('connection', (ws: WebSocket) => {
 
   ws.on('close', () => {
     console.log(`Player disconnected: ${playerId}`);
+    const disconnectedPlayer = players.get(ws);
     players.delete(ws);
 
-    // Broadcast disconnection
-    const leaveMessage: ServerPlayerLeaveMessage = {
-      type: 'PLAYER_LEAVE',
-      id: playerId
-    };
-    broadcast(leaveMessage);
+    // Broadcast disconnection to players on the same map
+    if (disconnectedPlayer) {
+      const leaveMessage: ServerPlayerLeaveMessage = {
+        type: 'PLAYER_LEAVE',
+        id: playerId
+      };
+      broadcastToMap(disconnectedPlayer.mapId, leaveMessage);
+    }
   });
 });
 
-function broadcast(message: ServerMessage, excludeWs: WebSocket | null = null): void {
+// Broadcast to players on a specific map only
+function broadcastToMap(mapId: number, message: ServerMessage, excludeWs: WebSocket | null = null): void {
   const data = JSON.stringify(message);
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN && client !== excludeWs) {
-      client.send(data);
+  players.forEach((player, ws) => {
+    if (player.mapId === mapId && ws.readyState === WebSocket.OPEN && ws !== excludeWs) {
+      ws.send(data);
     }
   });
 }

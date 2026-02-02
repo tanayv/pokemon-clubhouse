@@ -7,6 +7,7 @@ export class Player {
   y: number; // Grid position Y
   sprite: HTMLImageElement;
   tileSize: number;
+  mapId: number; // NEW: current map ID
 
   // Movement
   isMoving: boolean;
