@@ -1,0 +1,17 @@
+lockfileVersion: '6.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+dependencies:
+  '@hyrious/marshal':
+    specifier: ^0.3.3
+    version: 0.3.3
+
+packages:
+
+  /@hyrious/marshal@0.3.3:
+    resolution: {integrity: sha512-Sprz5CmX+V5MEbgOfXB0iqJS2i703RsV2cXSKC3++Y+4EeUvZPJlv0tgvoBRNT7mvb6aUu7UeOzfiowXlAOmew==}
+    engines: {node: ^14.18.0 || >=16.0.0}
+    dev: false
