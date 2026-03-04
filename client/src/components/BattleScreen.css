@@ -1,0 +1,388 @@
+/* Battle screen covers the entire game viewport */
+.battle-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+/* Fixed-resolution viewport (480x320) scaled via CSS transform */
+.battle-viewport {
+  position: absolute;
+  top: 0;
+  left: 0;
+  image-rendering: pixelated;
+}
+
+/* Canvas fills the viewport exactly */
+.battle-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 480px;
+  height: 320px;
+  image-rendering: pixelated;
+  display: block;
+}
+
+/* ─── Info Boxes (GBA style: cream/beige with dark olive border) ─── */
+
+.info-box {
+  position: absolute;
+  background: linear-gradient(180deg, #f8f0d0 0%, #e8d8b0 100%);
+  border: 3px solid #584830;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-family: 'Courier New', monospace;
+  z-index: 10;
+  box-shadow: inset 1px 1px 0 #fff8e0, 2px 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* Wild Pokemon info: top-left */
+.wild-info {
+  top: 16px;
+  left: 12px;
+  width: 190px;
+}
+
+/* Player Pokemon info: right side, below center */
+.player-info {
+  top: 140px;
+  right: 12px;
+  width: 200px;
+}
+
+.info-name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.pokemon-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: #000;
+  letter-spacing: 0.5px;
+}
+
+.pokemon-level {
+  font-size: 14px;
+  font-weight: bold;
+  color: #000;
+}
+
+/* ─── HP Bar ─── */
+
+.hp-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.hp-label {
+  font-size: 11px;
+  font-weight: bold;
+  color: #f08030;
+}
+
+.hp-bar-outer {
+  flex: 1;
+  height: 6px;
+  background-color: #303030;
+  border: 1px solid #000;
+  border-radius: 1px;
+  overflow: hidden;
+  position: relative;
+}
+
+.hp-bar-fill {
+  height: 100%;
+  transition: width 0.5s ease, background-color 0.3s ease;
+  border-radius: 1px;
+}
+
+.hp-bar-fill.high {
+  background-color: #58d858;
+}
+
+.hp-bar-fill.medium {
+  background-color: #f8c800;
+}
+
+.hp-bar-fill.low {
+  background-color: #f83000;
+}
+
+.hp-numbers {
+  text-align: right;
+  font-size: 13px;
+  font-weight: bold;
+  color: #000;
+  margin-top: 1px;
+  font-family: 'Courier New', monospace;
+}
+
+.hp-slash {
+  margin: 0 1px;
+  color: #000;
+}
+
+/* ─── EXP Bar ─── */
+
+.exp-bar-outer {
+  height: 4px;
+  background-color: #303030;
+  border-radius: 1px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.exp-bar-fill {
+  height: 100%;
+  background-color: #48a8f8;
+  transition: width 0.3s ease;
+}
+
+/* ─── Bottom Panel (Message + Actions) ─── */
+
+.bottom-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  display: flex;
+  background-color: #000;
+}
+
+/* ─── Message Box (GBA style: dark teal/navy with white text) ─── */
+
+.message-box {
+  flex: 1;
+  background: linear-gradient(180deg, #406068 0%, #304850 100%);
+  border: 3px solid #f8f8f8;
+  border-radius: 6px;
+  margin: 8px;
+  margin-right: 4px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.message-text {
+  font-family: 'Courier New', monospace;
+  font-size: 18px;
+  font-weight: bold;
+  color: #f8f8f8;
+  line-height: 1.5;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* ─── Action Box (GBA style: cream/white with dark text) ─── */
+
+.action-box {
+  width: 190px;
+  background: linear-gradient(180deg, #f8f0d0 0%, #e8e0c0 100%);
+  border: 3px solid #584830;
+  border-radius: 6px;
+  margin: 8px;
+  margin-left: 4px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  box-shadow: inset 1px 1px 0 #fff8e0, 2px 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.action-box-wide {
+  width: 260px;
+}
+
+/* ─── Menu Grids ─── */
+
+.actions-grid,
+.moves-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+  width: 100%;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 2px 4px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.action-item {
+  color: #303030;
+  text-shadow: none;
+}
+
+.move-item {
+  color: #303030;
+  text-shadow: none;
+  font-size: 14px;
+}
+
+.move-item.disabled {
+  color: #a0a0a0;
+}
+
+.cursor {
+  color: #303030;
+  font-size: 12px;
+}
+
+/* ─── Move Info (shown in message box when fight is selected) ─── */
+
+.move-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.move-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.move-info-label {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  font-weight: bold;
+  color: #f8f8f8;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+.move-type-badge {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: bold;
+  color: #fff;
+  padding: 1px 8px;
+  border-radius: 3px;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.move-pp {
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: bold;
+  color: #f8f8f8;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Type colors */
+.type-normal { background-color: #a8a878; }
+.type-fire { background-color: #f08030; }
+.type-water { background-color: #6890f0; }
+.type-electric { background-color: #f8d030; color: #000; }
+.type-grass { background-color: #78c850; }
+.type-ice { background-color: #98d8d8; color: #000; }
+.type-fighting { background-color: #c03028; }
+.type-poison { background-color: #a040a0; }
+.type-ground { background-color: #e0c068; color: #000; }
+.type-flying { background-color: #a890f0; }
+.type-psychic { background-color: #f85888; }
+.type-bug { background-color: #a8b820; }
+.type-rock { background-color: #b8a038; }
+.type-ghost { background-color: #705898; }
+.type-dragon { background-color: #7038f8; }
+.type-dark { background-color: #705848; }
+.type-steel { background-color: #b8b8d0; color: #000; }
+.type-fairy { background-color: #ee99ac; }
+
+/* ─── Party List ─── */
+
+.party-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.party-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: bold;
+  color: #303030;
+  padding: 3px 4px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 3px;
+}
+
+.party-item.selected {
+  background-color: rgba(88, 72, 48, 0.1);
+}
+
+.party-item.fainted {
+  opacity: 0.5;
+}
+
+.party-item.active {
+  color: #406068;
+}
+
+.party-name {
+  min-width: 70px;
+}
+
+.party-level {
+  min-width: 30px;
+  font-size: 11px;
+}
+
+.party-hp-bar-outer {
+  flex: 1;
+  height: 5px;
+  background-color: #303030;
+  border: 1px solid #000;
+  border-radius: 1px;
+  overflow: hidden;
+  min-width: 40px;
+}
+
+.party-hp-text {
+  font-size: 11px;
+  min-width: 40px;
+  text-align: right;
+}
+
+.party-active-tag {
+  font-size: 10px;
+  color: #406068;
+  background-color: rgba(64, 96, 104, 0.15);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
+/* ─── Bag Placeholder ─── */
+
+.bag-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.bag-placeholder .menu-item {
+  color: #303030;
+}

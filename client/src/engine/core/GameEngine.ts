@@ -4,6 +4,8 @@ import { NetworkSystem } from '../network/NetworkSystem';
 import { AnimationSystem } from '../animation/AnimationSystem';
 import { InputSystem } from './InputSystem';
 import { RenderSystem } from './RenderSystem';
+import { EncounterSystem } from '../encounter/EncounterSystem';
+import { BattleSystem } from '../battle/BattleSystem';
 import { MapAssets } from '../../types/map.types';
 import { NetworkCallbacks, PlayerData } from '../../types/network.types';
 
@@ -27,6 +29,8 @@ export class GameEngine {
   private animationSystem: AnimationSystem;
   private inputSystem: InputSystem | null = null;
   private renderSystem: RenderSystem;
+  private encounterSystem: EncounterSystem;
+  private battleSystem: BattleSystem;
 
   // State
   private running: boolean = false;
@@ -58,6 +62,8 @@ export class GameEngine {
     this.playerSystem = new PlayerSystem(characterSprites, tileSize, initialMapId);
     this.animationSystem = new AnimationSystem(tileSize);
     this.renderSystem = new RenderSystem(canvas, tileSize);
+    this.encounterSystem = new EncounterSystem();
+    this.battleSystem = new BattleSystem();
 
     // Initialize network system with callbacks
     const networkCallbacks: NetworkCallbacks = {
@@ -143,8 +149,8 @@ export class GameEngine {
 
   // Update all systems
   private update(deltaTime: number): void {
-    // Update input
-    if (this.inputSystem) {
+    // Don't update input if battle is active
+    if (this.inputSystem && !this.battleSystem.isBattleActive()) {
       this.inputSystem.update();
     }
 
@@ -153,6 +159,9 @@ export class GameEngine {
 
     // Update animations
     this.animationSystem.update(deltaTime);
+
+    // Update battle system
+    this.battleSystem.update(deltaTime);
   }
 
   // Render everything
@@ -186,6 +195,19 @@ export class GameEngine {
     if (!isMoving && this.mapSystem.isGrassTile(x, y)) {
       console.log(`🌿 Grass animation triggered at (${x}, ${y})`);
       this.animationSystem.triggerGrassAnimation(x, y);
+
+      // Check for wild Pokemon encounter
+      if (!this.battleSystem.isBattleActive()) {
+        const wildPokemon = this.encounterSystem.checkEncounter(currentMapId);
+        if (wildPokemon) {
+          // Start battle with player's first Pokemon
+          const localPlayer = this.playerSystem.getLocalPlayer();
+          if (localPlayer && localPlayer.party.length > 0) {
+            this.battleSystem.startBattle(localPlayer.party, wildPokemon);
+            console.log(`Encounter: ${localPlayer.party[0].species.name} vs ${wildPokemon.species.name}`);
+          }
+        }
+      }
     }
 
     // Check for map transitions when player finishes moving
@@ -292,5 +314,26 @@ export class GameEngine {
     this.animationSystem.destroy();
 
     console.log('[GameEngine] Destroyed');
+  }
+
+  // Battle system methods
+  getBattleData() {
+    return this.battleSystem.getBattleData();
+  }
+
+  handleBattleAttack(moveIndex: number): void {
+    this.battleSystem.attack(moveIndex);
+  }
+
+  handleBattleRun(): void {
+    this.battleSystem.run();
+  }
+
+  handleBattleSwitchPokemon(partyIndex: number): void {
+    this.battleSystem.switchPokemon(partyIndex);
+  }
+
+  handleBattleAdvance(): void {
+    this.battleSystem.advanceMessage();
   }
 }

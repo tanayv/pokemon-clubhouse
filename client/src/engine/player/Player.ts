@@ -1,7 +1,12 @@
+import { Pokemon } from '../../types/pokemon.types';
+import { generateWildPokemon } from '../../data/pokemonDatabase';
+
 type Direction = 0 | 1 | 2 | 3; // 0=down, 1=left, 2=right, 3=up
 type MoveCallback = (x: number, y: number, direction: Direction, isMoving: boolean) => void;
 
 export class Player {
+  // Pokemon party
+  party: Pokemon[];
   // Position
   x: number; // Grid position X
   y: number; // Grid position Y
@@ -56,6 +61,9 @@ export class Player {
 
     this.spriteWidth = 32;
     this.spriteHeight = 48;
+
+    // Initialize with a starter Pokemon (Bulbasaur at level 5)
+    this.party = [generateWildPokemon(1, 5)];
   }
 
   // Start moving in a direction
